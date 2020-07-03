@@ -1,0 +1,720 @@
+---
+title: "US COVID Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    logo: corona.png
+    source_code: "https://github.com/m-jmc/US-COVID-Tracing"
+
+---
+
+<style>                     
+.navbar {
+  background-color:black;
+  border-color:black;
+}
+.navbar-brand {
+color:white!important;
+}
+</style> 
+
+
+```{r setup, include=FALSE}
+
+
+# Logo file 48 pixels High
+ 
+library(flexdashboard) 
+library(highcharter)
+library(plotly) 
+library(viridis)
+library(tidyverse)
+library(crosstalk)
+library(RColorBrewer)
+library(scales)
+library(ggrepel)
+library(lubridate)
+library(formattable)
+library(maps)
+library(usmap)
+library(leaflet)
+library(rgdal)
+library(deSolve)
+library(gridExtra)
+library(formattable)
+library(tigris)
+library(reshape2)
+
+
+# Create brewer blues palette with greater than 9 colors:
+# Classic palette BuPu, with 4 colors
+Xtra_Blue <- brewer.pal(9, "Blues") 
+# Add more colors to this palette :
+Xtra_Blue <- colorRampPalette(Xtra_Blue)(12)
+
+ltblue = "#86baf9"
+drkblue = "#095dc3"
+# Plot it
+#pie(rep(1, length(Xtra_Blue)), col = Xtra_Blue , main="") 
+
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+
+# Use two days ago as the "latest date" to accommodate reporting delays or dataset updates
+latest_date <- list(Sys.Date()-2)
+
+# Import dataset
+data <- read_csv("us-counties.csv")
+
+# Creating df of state and county populations from 2015 census estimates part of the usmap package
+us.county.pop <- countypop
+us.state.pop <- statepop %>% rename(state = full)
+
+
+#Joining county population estimates to the case/death estimates 
+us.recent <- data %>% 
+             filter(date==latest_date) %>% 
+             subset(select=c("fips","cases","deaths","state")) %>% 
+             left_join(us.county.pop, by=c("fips"))
+
+# create per capital (10,000) calculations
+us.recent$Confirmed_Per_Capita <- round(us.recent$cases/us.recent$pop_2015*10000,2)
+us.recent$Deaths_Per_Capita <- round(us.recent$deaths/us.recent$pop_2015*10000,2)
+
+# Create a GEOID column to merge with the sp object for leaflet mapping
+us.recent$GEOID <- us.recent$fips
+
+# Create the US county sp object from the tigris package and merge the calculated rates to the map
+us.sp <- counties(cb = TRUE)
+us.sp <- sp::merge(us.sp,us.recent, by="GEOID")
+
+#Set the color palette (viridis package option a = Magma)
+#uspal <- colorNumeric("magma", domain=us.sp$Confirmed_Per_Capita, na.color="transparent")
+uspal <- colorQuantile(Xtra_Blue, domain=us.sp$Confirmed_Per_Capita, n=10, na.color="transparent")
+# Set the popup text option
+uspopup_t <- paste0("State: ", as.character(us.sp$state),  "<br>",
+  "County: ", as.character(us.sp$NAME),  "<br>", 
+                  "Confirmed Cases Per 10,000 Residents: ", as.character(us.sp$Confirmed_Per_Capita),  "<br>",
+                  "Total Cases: ", as.character(us.sp$cases))
+
+
+```
+
+
+National {data-orientation=columns data-icon="ion-android-globe"}
+=======================================================================
+
+```{r, echo=FALSE, include=FALSE}
+
+# Reformatting the latest date as a data frame, renaming the column to last week to subtract 7 days, also create month df here as well
+latest_date.df <- as.data.frame(latest_date) 
+names(latest_date.df)[1]<-paste("Date")
+LastWeek.df <- latest_date.df$Date - 7
+LastMonth.df <- latest_date.df$Date - 30
+LatestDate.df <- latest_date.df$Date
+
+# group and summarize for state level counts
+state <- data %>%
+         subset(select = c("state","date","cases","deaths")) %>%
+         group_by(state, date) %>%
+         summarise(cases = sum(cases), deaths = sum(deaths))
+
+state <- state %>% 
+         left_join(us.state.pop[,c("state","pop_2015")], by=c("state")) %>% 
+         rename(Population = pop_2015)
+
+# Per Capita rates are per 100,000 using 2015 state population estimates
+state$`Cases per Capita` <- round(state$cases/state$Population*100000,2)
+state$`Deaths per Capita` <- round(state$deaths/state$Population*100000,2)
+
+# Take current counts and counts from last week and last month
+state.week <- state %>% filter(date == (LastWeek.df)) %>% rename(lastweek = cases)
+state.month <- state %>% filter(date == (LastMonth.df)) %>% rename(lastmonth = cases)
+state.current <- state %>% filter(date == (LatestDate.df)) %>% rename(currentcases = cases)
+
+# Join counts from last week and last month to a single dataframe
+state.current <- state.current %>% left_join(state.week[,c("state","lastweek")], by=c("state"))
+state.current <- state.current %>% left_join(state.month[,c("state","lastmonth")], by=c("state"))
+
+# calculate rates per capita growth over past week and month
+state.current$lastweek_percapita <- round(state.current$lastweek/state.current$Population*100000,2)
+state.current$lastmonth_percapita <- round(state.current$lastmonth/state.current$Population*100000,2)
+
+# % difference between current and previous (week / month) per capita values
+state.current$`Past Week Change CPC` <- percent(round((state.current$`Cases per Capita` - state.current$lastweek_percapita) / 
+                                 ((state.current$`Cases per Capita` + state.current$lastweek_percapita)/
+                                    2),2))
+
+state.current$`Past Month Change CPC` <- percent(round((state.current$`Cases per Capita` - state.current$lastmonth_percapita) /
+                                       ((state.current$`Cases per Capita` + state.current$lastmonth_percapita)/
+                                          2),2))
+
+state.tbl <- state.current %>% subset(select = c("state",
+                                                 "Population",
+                                                 "currentcases",
+                                                 "Cases per Capita",
+                                                 "Deaths per Capita",
+                                                 "Past Week Change CPC",
+                                                 "Past Month Change CPC")) %>% 
+                                      rename(State=state,
+                                             `Current Cases`=currentcases) %>%
+                                      arrange(desc(`Past Week Change CPC`)) 
+
+
+state.formattable <- state.tbl %>%
+                formattable(align =c("l","l","l","c","c","c","c"),
+                list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
+                `Past Week Change CPC` = color_bar(ltblue)))
+
+
+```
+
+
+Column {data-width=200}
+-------------------------------------
+
+### New Cases <font size='1'> Yesterday </font>
+
+```{r fig.height=0.8}
+
+# Not straightforard, but taking the case count from 2 and 3 days ago and summarising by date to create a df of two values
+new.cases <- state %>%
+              filter(date == (Sys.Date()-2) | date == (Sys.Date()-3)) %>%
+              subset(select = c("date","cases")) %>%
+              group_by(date) %>%
+              summarise(cases = sum(cases)) %>%
+              subset(select = c("cases")) %>%
+              melt(id.var="cases")
+
+# There has got to be a better way to do this, but subtracting the second row (which is the most recent date) from the first to get the total new cases               
+new.cases <- new.cases[2, ] - new.cases[1, ]
+new.cases <- format(new.cases$cases,big.mark=",",scientific=FALSE)
+
+# # Using table indexs to subtract resulting rows
+# new.cases <- rbind(new.cases, new.cases[2, ] - new.cases[1, ])
+
+# Create value box
+valueBox(new.cases, icon = "ion-ios-medkit", color = "rgb(9, 93, 195)")
+
+
+```
+
+### Deaths <font size='1'> Yesterday </font>
+
+```{r fig.height=0.8}
+
+new.deaths <- state %>%
+              filter(date == (Sys.Date()-2) | date == (Sys.Date()-3)) %>%
+              subset(select = c("date","deaths")) %>%
+              group_by(date) %>%
+              summarise(deaths = sum(deaths)) %>%
+              subset(select = c("deaths")) %>%
+              melt(id.var="deaths")
+
+# There has got to be a better way to do this, but subtracting the second row (which is the most recent date) from the first to get the total new cases               
+new.deaths <- new.deaths[2, ] - new.deaths[1, ] 
+new.deaths <- format(new.deaths$deaths,big.mark=",",scientific=FALSE)
+
+
+valueBox(new.deaths, icon = "ion-ios-close", color = "rgb(9, 93, 195)")
+
+```
+
+### Total US Cases <font size='1'> All Time </font>
+
+```{r fig.height=0.8}
+
+total.cases <- data %>%
+              filter(date == (Sys.Date()-2)) %>%
+              subset(select = c("cases")) %>%
+              summarise(cases = sum(cases)) 
+
+total.cases <- format(total.cases$cases,big.mark=",",scientific=FALSE)
+
+
+valueBox(total.cases, icon = "ion-ios-medkit-outline", color = "rgb(134, 186, 249)")
+
+```
+
+
+### Total US Deaths <font size='1'> All Time </font>
+
+```{r fig.height=0.8}
+
+total.deaths <- data %>%
+              filter(date == (Sys.Date()-2)) %>%
+              subset(select = c("deaths")) %>%
+              summarise(deaths = sum(deaths)) 
+
+total.deaths <- format(total.deaths$deaths,big.mark=",",scientific=FALSE)
+
+
+valueBox(total.deaths, icon = "ion-ios-close-outline", color = "rgb(134, 186, 249)")
+
+```
+
+### {.no-padding}
+
+```{r fig.height=0.8}
+
+# Mapping state abrv to region for regional case summary
+# Source: https://stackoverflow.com/questions/46066974/add-column-to-label-u-s-states-by-their-u-s-census-region
+
+NE.abrv <- c("CT","ME","MA","NH","RI","VT","NJ","NY","PA")
+MW.abrv <- c("IN","IL","MI","OH","WI","IA","KS","MN","MO","NE","ND","SD")
+S.abrv <- c("DE","DC","FL","GA","MD","NC","SC","VA","WV","AL","KY","MS","TN","AR","LA","OK","TX")
+W.abrv <- c("AZ","CO","ID","NM","MT","UT","NV","WY","AK","CA","HI","OR","WA")
+
+region.list <- list(
+               Northeast=NE.abrv,
+               Midwest=MW.abrv,
+               South=S.abrv,
+               West=W.abrv)
+
+# This creates a list column of the regions, which needs to be unnested before grouping 
+us.recent$Region <- sapply(us.recent$abbr, function(x) names(region.list)[grep(x,region.list)])
+us.recent <- us.recent %>%
+             unnest(cols = c(Region))
+
+# without a unique ID to match on, I created an id column with the row number to prevent duplicate rows when using left join. add a row number within each group of dates, so that only the first June from df_2 will be joined to the first June entry from df_1. 
+us.recent.region <- left_join(
+          state %>% group_by(state, date) %>% mutate(id = row_number()),
+          us.recent[,c("Region","state")] %>% group_by(state) %>% mutate(id = row_number()),
+          by = c("state", "id"))
+
+
+us.region <- us.recent.region %>%
+                        na.omit() %>%
+                        filter(date == (Sys.Date()-2)) %>%
+                        subset(select = c("cases","deaths","Region")) %>%
+                        group_by(Region) %>%
+                        summarise(cases.two = sum(cases), deaths.two = sum(deaths))
+
+us.region.three <- us.recent.region %>%
+                        na.omit() %>%
+                        filter(date == (Sys.Date()-3)) %>%
+                        subset(select = c("cases","deaths","Region")) %>%
+                        group_by(Region) %>%
+                        summarise(cases.three = sum(cases), deaths.three = sum(deaths)) 
+
+us.region$cases.three <- us.region.three$cases.three
+us.region$deaths.three <- us.region.three$deaths.three
+
+# find the region counts for the past day
+us.region$total <- (us.region$cases.two - us.region$cases.three)
+us.region$deathtotal <- (us.region$deaths.two - us.region$deaths.three)
+
+# calculate percent of all new cases by region
+us.region$pct <- percent( us.region$total / (sum(us.region$total)),2)
+us.region$dpct <- percent( us.region$deathtotal / (sum(us.region$deathtotal)),2)
+
+# Specify label location in the pie graph (side note: Dont use pie graphs!)
+# us.region <- us.region %>% 
+#   arrange(desc(pct)) %>%
+#   mutate(prop = total / sum(us.region$total) *100) %>%
+#   mutate(ypos = cumsum(prop)- 0.5*prop )
+# 
+# 
+# pie <- ggplot(us.region, aes(x="", y=pct, fill=Region)) +
+#               geom_bar(stat="identity", width=1) +
+#               coord_polar("y", start=0) +
+#               theme_void() +
+#               theme(legend.position="none") +
+#               scale_fill_brewer(palette="Blues")
+
+# Now we've made a nice (chicken) plot pie
+# plot(pie)
+
+# Bummer, doesn't render correctly in ggplotly and I'd rather not use the standard plot function. Switching over to highchart, huge shout out to # https://www.kaggle.com/tavoosi/suicide-data-full-interactive-dashboard/code 
+
+
+Region_color <- (brewer.pal(4, "Blues"))
+
+highchart() %>% 
+  hc_add_series(us.region, hcaes(x = Region, y = total, 
+                               color = Region_color), type = "pie") %>%
+  hc_tooltip(borderWidth = 1.5, headerFormat = "", pointFormat = paste("Region: <b>{point.Region} ({point.percentage:.1f}%)</b> <br> Total <b>{point.y}</b>")) %>%
+  hc_title(text = "<b>Cases by Region</b>", style = (list(fontSize = '14px'))) %>% 
+  hc_subtitle(text = "Yesterday", style = (list(fontSize = '10px'))) %>%
+  hc_plotOptions(pie = list(dataLabels = list(distance = 5, 
+                            style = list(fontSize = 10)), 
+                            size = 130)) 
+
+
+```
+
+### {.no-padding}
+
+```{r fig.height=0.8}
+
+highchart() %>% 
+  hc_add_series(us.region, hcaes(x = Region, y = deathtotal, 
+                               color = Region_color), type = "pie") %>%
+  hc_tooltip(borderWidth = 1.5, headerFormat = "", pointFormat = paste("Region: <b>{point.Region} ({point.percentage:.1f}%)</b> <br> Total <b>{point.y}</b>")) %>%
+  hc_title(text = "<b>Deaths by Region</b>", style = (list(fontSize = '14px'))) %>% 
+  hc_subtitle(text = "Yesterday", style = (list(fontSize = '10px'))) %>%
+  hc_plotOptions(pie = list(dataLabels = list(distance = 5, 
+                            style = list(fontSize = 10)), 
+                            size = 130)) 
+
+
+```
+
+
+
+
+
+
+Column {data-width=800}
+-------------------------------------
+
+
+### Cases Per Capita by County <font size='1'> Per Capita 10,000 </font>
+
+```{r, echo=FALSE}
+
+leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(-98, 39, zoom = 4) %>% 
+  addPolygons(data = us.sp , 
+              fillColor = ~uspal(us.sp$Confirmed_Per_Capita), 
+              fillOpacity = 0.7, 
+              weight = 0.2, 
+              smoothFactor = 0.2, 
+              popup = ~uspopup_t) %>%
+  addLegend(pal = uspal, 
+            values = us.sp$Confirmed_Per_Capita, 
+            position = "bottomright", 
+            title = "Quantile")
+            
+            
+```
+
+
+### State by State Summary <font size='1'> Per Capita 100,000 </font>
+
+```{r, echo=FALSE}
+
+formattable(state.formattable)
+
+```
+
+State {data-orientation=columns data-icon="ion-android-map"}
+=======================================================================
+
+
+Column {data-width=400}
+-------------------------------------
+
+### Top 10 Growth State's Trend
+
+```{r, echo=FALSE, warning=FALSE}
+
+time <- as.POSIXct(strptime(c("2020-01-22",latest_date), format = "%y-%m-%d"))
+top.states <- top_n(ungroup(state.tbl), 10, `Past Week Change CPC`)
+
+states.trend <- data %>% filter(`state` %in% top.states$State) %>%
+                  group_by(date, state) %>%
+                  summarise(cases = sum(cases)) %>%
+                  ggplot(aes(x=as.POSIXct(date),y=cases, color=state)) + 
+                  geom_point(size=.5) + 
+                  geom_line(alpha=.5) + 
+                  scale_x_datetime(limits =time) + 
+                  scale_color_manual(values=Xtra_Blue) +
+                  labs(title="") +
+                  xlab("") + 
+                  ylab("") +
+                  theme(legend.title=element_blank())
+                  
+ggplotly(states.trend)             
+
+
+```
+
+### Top 10 Case Growth Current Count
+
+```{r, echo=FALSE, warning=FALSE}
+
+lol.plot <- ggplot(top.states, aes(x=reorder(State,`Current Cases`), 
+                                   y=`Current Cases`)) +
+                  geom_segment( aes(x=reorder(State,`Current Cases`), 
+                                    xend=reorder(State,`Current Cases`),
+                                    y=0, 
+                                    yend=`Current Cases`)) +
+                  geom_point(size=5, 
+                             color=drkblue, 
+                             fill=alpha(drkblue, 0.3), 
+                             alpha=0.7, 
+                             shape=21, 
+                             stroke=2) +
+                  scale_y_continuous(name="Count", labels = scales::comma) +                
+                  coord_flip() +
+                  xlab("") +
+                  labs(title="")
+
+ 
+ggplotly(lol.plot)             
+
+
+```
+
+
+
+Column {data-width=400}
+-------------------------------------
+
+### Case Growth by State
+
+```{r, echo=FALSE, warning=FALSE}
+
+
+p <- ggplot(state, aes(date, state)) + 
+     geom_tile(aes(fill = cases)) +
+     scale_fill_gradient(name="Confirmed Cases", 
+                        low="white",
+                        high=drkblue,
+                        limits = c(0, 100000),
+                        oob = scales::squish) +
+     theme(panel.background=element_rect(fill="white", color="white"),
+           plot.background = element_blank(),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           panel.border = element_blank()) +
+     labs(title = "", 
+          subtitle = "") +
+     ylab("") +
+     xlab("") + 
+     theme(legend.position="none")
+
+
+
+#plot(p)
+
+ggplotly(p)
+
+```
+
+
+Counties {data-orientation=rows data-icon="ion-pin"}
+=======================================================================
+
+
+## Row 1 {data-height=400 .no-padding}
+
+
+### Shortest Number of Days to 1000 Cases <font size='1'> Of all Counties with atleast 1000 cases </font>
+
+```{r, echo=FALSE}
+
+# of the counties which have 1000 cases and aren't missing a fips code (WHICH REMOVES NYC DAMNIT)
+min.k <- data %>% filter(cases >= 1000 & !is.na(fips)) %>% arrange(date)
+# grab those counties when they had between 0-1000 cases
+
+t.cases <- data %>% filter(fips %in% min.k$fips & cases <= 1000)
+# determine the number of days it took to get to 1000 cases
+t.cases <-t.cases %>% group_by(fips) %>% mutate(id = row_number())
+t.cases <-t.cases %>% group_by(fips) %>% mutate(id = 1:n())
+t.cases <-t.cases %>% group_by(fips) %>% mutate(id = seq_len(n()))
+t.cases <-t.cases %>% group_by(fips) %>% mutate(id = seq_along(date))
+
+# the number of days it took a zip code, with at least 1000 cases to get to 1000 by fips
+t.cases.max <- t.cases %>% 
+                group_by(fips) %>% 
+                summarise(id = max(id)) %>% 
+                rename(NumDays = id)
+
+# Find bottom 10 values and fips codes
+max.tbl <- top_n(ungroup(t.cases.max), -10, NumDays)
+
+max.tbl <- min.k %>% 
+              filter(date==latest_date) %>% 
+              subset(select=c("fips",
+                              "cases",
+                              "county",
+                              "state")) %>%  
+              left_join(max.tbl[,c("fips","NumDays")], by=c("fips"))  
+
+# Reorder the columns for table
+max.tbl <- max.tbl[c("fips",
+                     "state", 
+                     "county", 
+                     "cases",
+                     "NumDays")]
+
+
+max.tbl <-  max.tbl %>%
+            filter(!is.na(NumDays)) %>%
+            subset(select = c("state",
+                              "county",
+                              "cases",
+                              "NumDays")) %>%
+            rename(State=state, 
+                   County=county, 
+                   Cases=cases, 
+                   `Days to 1k`=NumDays) %>% 
+            arrange(`Days to 1k`) %>%
+            formattable(align =c("l","l","r","r"),
+                list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
+                `Days to 1k` = color_bar(ltblue)))
+
+
+
+formattable(max.tbl)
+
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+
+# Top case growth in past 7 and 30 days
+
+growth <- data %>% filter(!is.na(fips)) %>% group_by(fips) %>% arrange(date)
+
+# Reformatting the latest date as a data frame, renaming the column to last week to subtract 7 days, also create month df here as well
+latest_date.df <- as.data.frame(latest_date) 
+names(latest_date.df)[1]<-paste("Date")
+LastWeek.df <- latest_date.df$Date - 7
+LastMonth.df <- latest_date.df$Date - 30
+LatestDate.df <- latest_date.df$Date
+
+# Subset last 7, 30 days, and currnt value                                                         
+tseven <- growth %>% filter(date == (LastWeek.df)) %>% rename(lastweek = cases)
+tthirty <- growth %>% filter(date == (LastMonth.df)) %>% rename(lastmonth = cases)
+tcurrent <- growth %>% filter(date == (LatestDate.df)) %>% rename(currentcases = cases)
+
+
+# Join the last wee and last month totals to our current df
+tcurrent <- tcurrent %>% left_join(tseven[,c("fips","lastweek")], by=c("fips"))
+tcurrent <- tcurrent %>% left_join(tthirty[,c("fips","lastmonth")], by=c("fips"))
+
+# Join current population and cases per capita from previous df above which of course uses GEOID
+tcurrent <- tcurrent %>% left_join(us.recent[,c("fips","pop_2015","Confirmed_Per_Capita")], by=c("fips"))
+
+# calculate rates per capita growth over past week and month
+tcurrent$lastweek_percapita <- round(tcurrent$lastweek/tcurrent$pop_2015*10000,2)
+tcurrent$lastmonth_percapita <- round(tcurrent$lastmonth/tcurrent$pop_2015*10000,2)
+
+# % difference between current and previous values
+tcurrent$lastweek_pc_delta <- round((tcurrent$Confirmed_Per_Capita - tcurrent$lastweek_percapita) / 
+                                 ((tcurrent$Confirmed_Per_Capita + tcurrent$lastweek_percapita)/
+                                    2)*100,2)
+                               
+                               
+tcurrent$lastmonth_pc_delta <- round((tcurrent$Confirmed_Per_Capita - tcurrent$lastmonth_percapita) /
+                                       ((tcurrent$Confirmed_Per_Capita + tcurrent$lastmonth_percapita)/
+                                          2)*100,2)
+
+
+# ID top quartile (> 75%) of postivie % change per capita over the past week and month
+topweekgrowth <- subset(tcurrent, lastweek_pc_delta > quantile(lastweek_pc_delta, prob = 0.75, na.rm = TRUE))
+# topweekgrowth$topweekgrowth <- 1
+topmonthgrowth <- subset(tcurrent, lastmonth_pc_delta > quantile(lastmonth_pc_delta, prob = 0.75, na.rm = TRUE))
+# topmonthgrowth$topmonthgrowth <- 1
+
+topcurrentcasecount <- subset(tcurrent, Confirmed_Per_Capita > quantile(Confirmed_Per_Capita, prob = 0.75, na.rm = TRUE))
+# topcurrentcasecount$topcurrentcasecount <- 1
+
+
+# Find the bottom 25% growth per capita week/month
+lowestweekgrowth <- tcurrent %>% filter(fips %in% min.k$fips) %>% subset(lastweek_pc_delta < quantile(lastweek_pc_delta, prob = 0.25, na.rm = TRUE))
+# lowestweekgrowth$lowestweekgrowth <- 1
+
+lowestmonthgrowth <- tcurrent %>% filter(fips %in% min.k$fips) %>% subset(lastmonth_pc_delta < quantile(lastmonth_pc_delta, prob = 0.25, na.rm = TRUE))
+
+
+# Lowest growth after 1000 cases (best containment)
+# lpw.tbl <-  top_n(ungroup(lowestweekgrowth), -10, lastweek_pc_delta) %>%
+#             subset(select = c("state","county","pop_2015","currentcases","Confirmed_Per_Capita", "lastweek_pc_delta")) %>%
+#             rename(State=state, County=county, Population=pop_2015, `Current Cases`=currentcases, `Cases Per Capita (CPC/10k)`=Confirmed_Per_Capita, `Percent Increase CPC Past Week` = lastweek_pc_delta) %>% arrange(desc(`Percent Increase CPC Past Week`)) %>% 
+#   arrange(`Percent Increase CPC Past Week`) %>%
+#             formattable(align =c("l","l","r","r","r","r"),
+#                 list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
+#                 `Percent Increase CPC Past Week` = color_bar(ltblue)))
+# 
+# 
+# formattable(lpw.tbl)
+
+
+
+
+
+```
+
+
+### Top 10 counties by cases per capita
+
+```{r}
+
+# Top cases per capita
+cpc.tbl <-  top_n(ungroup(topcurrentcasecount), 10, Confirmed_Per_Capita) %>%
+            subset(select = c("state","county","pop_2015","currentcases","Confirmed_Per_Capita")) %>%
+            rename(State=state, County=county, Population=pop_2015, `Current Cases`=currentcases, `Cases Per Capita (CPC/10k)`=Confirmed_Per_Capita) %>% 
+            arrange(desc(`Cases Per Capita (CPC/10k)`)) %>%
+            formattable(align =c("l","l","r","r","r"),
+                list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
+                `Cases Per Capita (CPC/10k)` = color_bar(ltblue)))
+
+formattable(cpc.tbl)
+
+```
+
+## Row 2 {data-height=400 .no-padding}
+
+### Top Growth: Past Week
+
+```{r, echo=FALSE, warning=FALSE}
+
+tpw.tbl <-  top_n(ungroup(topweekgrowth), 10, lastweek_pc_delta) %>%
+            subset(select = c("state","county","pop_2015","currentcases","Confirmed_Per_Capita", "lastweek_pc_delta")) %>%
+            rename(State=state, County=county, Population=pop_2015, `Current Cases`=currentcases, `Cases Per Capita (CPC/10k)`=Confirmed_Per_Capita, `Percent Increase CPC Past Week` = lastweek_pc_delta) %>% arrange(desc(`Percent Increase CPC Past Week`)) %>%
+            formattable(align =c("l","l","r","r","r","r"),
+                list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
+                `Percent Increase CPC Past Week` = color_bar(ltblue)))
+
+
+formattable(tpw.tbl)
+
+
+```
+
+
+### Top Growth: Past Month
+
+```{r, echo=FALSE, warning=FALSE}
+
+tpm.tbl <-  top_n(ungroup(topmonthgrowth), 10, lastmonth_pc_delta) %>%
+            subset(select = c("state","county","pop_2015","currentcases","Confirmed_Per_Capita", "lastmonth_pc_delta")) %>%
+            rename(State=state, County=county, Population=pop_2015, `Current Cases`=currentcases, `Cases Per Capita (CPC/10k)`=Confirmed_Per_Capita, `Percent Increase CPC Past Month` = lastmonth_pc_delta) %>% arrange(desc(`Percent Increase CPC Past Month`)) %>%
+            formattable(align =c("l","l","r","r","r","r"),
+                list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
+                `Percent Increase CPC Past Month` = color_bar(ltblue)))
+
+formattable(tpm.tbl)
+
+```
+
+
+info {data-orientation=rows data-icon="ion-ios-information-outline"}
+=======================================================================
+
+```{r fig.height=0.8}
+
+cat("Current as of:\t",format(as.POSIXct(format((Sys.Date()-2)))))
+
+```
+
+### Acknowledgement 
+
+This work is a reimagining of my other Kaggle projects [HERE](https://www.kaggle.com/mcnamamj/us-county-spread-sir-mice-svm) and [HERE](https://www.kaggle.com/mcnamamj/covid-19-graphing-and-mapping) reassembled in a dashboard style for easier digestion. If you like my work, please upvote it! Let me know if there are any questions or comments below!
+
+Thank you to [Saba Tavoosi](https://www.kaggle.com/tavoosi/suicide-data-full-interactive-dashboard) for inspiration from her wonderful Suicide interactive dashboard. In particular, the slick pie charts rendered in highchart. In addition [Philipp Spachtholz](https://www.kaggle.com/philippsp/interactive-dashboards-in-r) for his dashboard on the titanic disaster. Not to mention the Times for providing the dataset.
+
+Other information available at [FlexDashboard](https://rmarkdown.rstudio.com/flexdashboard/) and the [R Graph Gallery](https://www.r-graph-gallery.com/). Icons from [ionicons](https://ionicons.com/v2/cheatsheet.html)
+
+
+
+
+
+
