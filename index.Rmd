@@ -545,6 +545,20 @@ max.tbl <- max.tbl[c("fips",
                      "cases",
                      "NumDays")]
 
+#save for plot
+max.plt <- max.tbl %>%
+            filter(!is.na(NumDays)) %>%
+            subset(select = c("state",
+                              "county",
+                              "cases",
+                              "NumDays")) %>%
+            rename(State=state, 
+                   County=county, 
+                   Cases=cases, 
+                   `Days to 1k`=NumDays) %>% 
+            arrange(`Days to 1k`)
+                    
+                    
 
 max.tbl <-  max.tbl %>%
             filter(!is.na(NumDays)) %>%
@@ -562,8 +576,28 @@ max.tbl <-  max.tbl %>%
                 `Days to 1k` = color_bar(ltblue)))
 
 
+#formattable(max.tbl)
 
-formattable(max.tbl)
+#createing a barplot because
+
+max.plt$`State & County` = paste(max.plt$State,",",max.plt$County)
+
+max.plt <- max.plt %>%
+              mutate(name = fct_reorder(`State & County`, desc(`Days to 1k`))) %>%
+              ggplot(aes(x=name))+
+              geom_bar(aes(y=`Days to 1k`, fill=name),
+                       stat="identity",
+                       position ="identity",
+                       alpha=.8) +
+                    theme_classic() +
+              scale_fill_manual(values=Xtra_Blue) +
+                    theme(legend.position = "none") +
+              coord_flip() +
+                    labs(title="") +
+                       xlab("") + 
+                       ylab("Days")
+
+ggplotly(max.plt)
 
 
 ```
@@ -659,7 +693,34 @@ cpc.tbl <-  top_n(ungroup(topcurrentcasecount), 10, Confirmed_Per_Capita) %>%
                 list(State = formatter("span", style = ~ formattable::style(color = "grey",font.weight = "bold")),
                 `Cases Per Capita (CPC/10k)` = color_bar(ltblue)))
 
-formattable(cpc.tbl)
+#formattable(cpc.tbl)
+
+
+
+# Swtich from table to bar graph
+cpc.plt <-  top_n(ungroup(topcurrentcasecount), 10, Confirmed_Per_Capita) %>%
+            subset(select = c("state","county","pop_2015","currentcases","Confirmed_Per_Capita")) %>%
+            rename(State=state, County=county, Population=pop_2015, `Current Cases`=currentcases, `Cases Per Capita (CPC/10k)`=Confirmed_Per_Capita) %>% 
+            arrange(desc(`Cases Per Capita (CPC/10k)`))
+
+cpc.plt$`State & County` = paste(cpc.plt$State,",",cpc.plt$County)
+
+cpc.plt.fnl <- cpc.plt %>%
+              mutate(name = fct_reorder(`State & County`, desc(`Cases Per Capita (CPC/10k)`))) %>%
+              ggplot(aes(x=name))+
+              geom_bar(aes(y=`Cases Per Capita (CPC/10k)`, fill=name),
+                       stat="identity",
+                       position ="identity",
+                       alpha=.8) +
+                    theme_classic() +
+              scale_fill_manual(values=rev(Xtra_Blue)) +
+                    theme(legend.position = "none") +
+                    labs(title="") +
+              theme(axis.text.x = element_text(angle = 45)) +
+                       xlab("") + 
+                       ylab("Cases Per Capita")
+
+ggplotly(cpc.plt.fnl)
 
 ```
 
@@ -710,14 +771,14 @@ cat("Current as of:\t",format(as.POSIXct(format((Sys.Date()-2)))))
 
 ### Acknowledgement 
 
-This work is a reimagining of my other Kaggle projects [HERE](https://www.kaggle.com/mcnamamj/us-county-spread-sir-mice-svm) and [HERE](https://www.kaggle.com/mcnamamj/covid-19-graphing-and-mapping) reassembled in a dashboard style for easier digestion. If you like my work, please upvote it! Let me know if there are any questions or comments below!
+This dashboard is an interpretation of my other COVID projects [HERE](https://www.kaggle.com/mcnamamj/us-county-spread-sir-mice-svm) and [HERE](https://www.kaggle.com/mcnamamj/covid-19-graphing-and-mapping).
 
-Thank you to [Saba Tavoosi](https://www.kaggle.com/tavoosi/suicide-data-full-interactive-dashboard) for inspiration from her wonderful Suicide interactive dashboard. In particular, the slick pie charts rendered in highchart. In addition [Philipp Spachtholz](https://www.kaggle.com/philippsp/interactive-dashboards-in-r) for his dashboard on the titanic disaster. Not to mention the Times for providing the dataset.
-
-Other information available at [FlexDashboard](https://rmarkdown.rstudio.com/flexdashboard/) and the [R Graph Gallery](https://www.r-graph-gallery.com/). Icons from [ionicons](https://ionicons.com/v2/cheatsheet.html)
+Thank you to [Saba Tavoosi](https://www.kaggle.com/tavoosi/suicide-data-full-interactive-dashboard) for inspiration from the wonderful Suicide interactive dashboard. In particular, the slick pie charts rendered in highchart. Other information available at [FlexDashboard](https://rmarkdown.rstudio.com/flexdashboard/) and the [R Graph Gallery](https://www.r-graph-gallery.com/). Icons from [ionicons](https://ionicons.com/v2/cheatsheet.html)
 
 
+###
 
+###
 
 
 
