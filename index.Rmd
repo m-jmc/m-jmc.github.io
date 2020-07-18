@@ -765,7 +765,7 @@ info {data-orientation=rows data-icon="ion-ios-information-outline"}
 
 ```{r fig.height=0.8}
 
-cat("Current as of:\t",format(as.POSIXct(format((Sys.Date()-2)))))
+cat("Updated daily at 9:31am, Data current as of:\t",format(as.POSIXct(format((Sys.Date()-2)))))
 
 ```
 
