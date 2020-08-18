@@ -49,7 +49,7 @@ library(reshape2)
 # Classic palette BuPu, with 4 colors
 Xtra_Blue <- brewer.pal(9, "Blues") 
 # Add more colors to this palette :
-Xtra_Blue <- colorRampPalette(Xtra_Blue)(12)
+Xtra_Blue <- colorRampPalette(Xtra_Blue)(15)
 
 ltblue = "#86baf9"
 drkblue = "#095dc3"
@@ -773,7 +773,7 @@ cat("Updated daily at 9:31am, Data current as of:\t",format(as.POSIXct(format((S
 
 This dashboard is an interpretation of my other COVID projects [HERE](https://www.kaggle.com/mcnamamj/us-county-spread-sir-mice-svm) and [HERE](https://www.kaggle.com/mcnamamj/covid-19-graphing-and-mapping).
 
-Thank you to [Saba Tavoosi](https://www.kaggle.com/tavoosi/suicide-data-full-interactive-dashboard) for inspiration from the wonderful Suicide interactive dashboard. In particular, the slick pie charts rendered in highchart. Other information available at [FlexDashboard](https://rmarkdown.rstudio.com/flexdashboard/) and the [R Graph Gallery](https://www.r-graph-gallery.com/). Icons from [ionicons](https://ionicons.com/v2/cheatsheet.html)
+Other information available at [FlexDashboard](https://rmarkdown.rstudio.com/flexdashboard/) and the [R Graph Gallery](https://www.r-graph-gallery.com/). Icons from [ionicons](https://ionicons.com/v2/cheatsheet.html)
 
 
 ###

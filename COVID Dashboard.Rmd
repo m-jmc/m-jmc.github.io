@@ -49,7 +49,7 @@ library(reshape2)
 # Classic palette BuPu, with 4 colors
 Xtra_Blue <- brewer.pal(9, "Blues") 
 # Add more colors to this palette :
-Xtra_Blue <- colorRampPalette(Xtra_Blue)(12)
+Xtra_Blue <- colorRampPalette(Xtra_Blue)(15)
 
 ltblue = "#86baf9"
 drkblue = "#095dc3"
@@ -415,7 +415,7 @@ Column {data-width=400}
 ```{r, echo=FALSE, warning=FALSE}
 
 time <- as.POSIXct(strptime(c("2020-01-22",latest_date), format = "%y-%m-%d"))
-top.states <- top_n(ungroup(state.tbl), 10, `Past Week Change CPC`)
+top.states <- top_n(ungroup(state.tbl), 9, `Past Week Change CPC`)
 
 states.trend <- data %>% filter(`state` %in% top.states$State) %>%
                   group_by(date, state) %>%
