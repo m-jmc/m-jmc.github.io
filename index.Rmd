@@ -500,7 +500,7 @@ p <- ggplot(state, aes(date, state)) +
 
 ggplotly(p = p,
          width = 750, 
-         height = 500)
+         height = 1000)
 
 ```
 
