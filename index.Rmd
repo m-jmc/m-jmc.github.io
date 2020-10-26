@@ -375,9 +375,9 @@ Column {data-width=800}
 
 ### Cases Per Capita by County <font size='1'> Per Capita 10,000 </font>
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, fig.height=5, fig.width=10}
 
-leaflet() %>%
+leaflet(width = 750, height = 500) %>%
   addProviderTiles("CartoDB.Positron") %>%
   setView(-98, 39, zoom = 4) %>% 
   addPolygons(data = us.sp , 
@@ -412,7 +412,7 @@ Column {data-width=400}
 
 ### Top 10 Growth State's Trend
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, fig.height=4, fig.width=4}
 
 time <- as.POSIXct(strptime(c("2020-01-22",latest_date), format = "%y-%m-%d"))
 top.states <- top_n(ungroup(state.tbl), 10, `Past Week Change CPC`)
@@ -430,14 +430,16 @@ states.trend <- data %>% filter(`state` %in% top.states$State) %>%
                   ylab("") +
                   theme(legend.title=element_blank())
                   
-ggplotly(states.trend)             
-
+ggplotly(p= states.trend,
+         width = 750, 
+         height = 500)             
+#plot(states.trend)
 
 ```
 
 ### Top 10 Case Growth Current Count
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, fig.height=4, fig.width=4}
 
 lol.plot <- ggplot(top.states, aes(x=reorder(State,`Current Cases`), 
                                    y=`Current Cases`)) +
@@ -457,7 +459,9 @@ lol.plot <- ggplot(top.states, aes(x=reorder(State,`Current Cases`),
                   labs(title="")
 
  
-ggplotly(lol.plot)             
+ggplotly(p = lol.plot,
+         width = 750, 
+         height = 500)             
 
 
 ```
@@ -469,7 +473,7 @@ Column {data-width=400}
 
 ### Case Growth by State
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, fig.height=4, fig.width=4}
 
 
 p <- ggplot(state, aes(date, state)) + 
@@ -494,7 +498,9 @@ p <- ggplot(state, aes(date, state)) +
 
 #plot(p)
 
-ggplotly(p)
+ggplotly(p = p,
+         width = 750, 
+         height = 500)
 
 ```
 
@@ -597,7 +603,9 @@ max.plt <- max.plt %>%
                        xlab("") + 
                        ylab("Days")
 
-ggplotly(max.plt)
+ggplotly(p=max.plt,
+         width = 750, 
+         height = 500)
 
 
 ```
@@ -720,7 +728,9 @@ cpc.plt.fnl <- cpc.plt %>%
                        xlab("") + 
                        ylab("Cases Per Capita")
 
-ggplotly(cpc.plt.fnl)
+ggplotly(p=cpc.plt.fnl,
+         width = 750, 
+         height = 500)
 
 ```
 
