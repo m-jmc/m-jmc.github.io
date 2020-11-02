@@ -431,7 +431,7 @@ states.trend <- data %>% filter(`state` %in% top.states$State) %>%
                   theme(legend.title=element_blank())
                   
 ggplotly(p= states.trend,
-         width = 750, 
+         width = 500, 
          height = 500)             
 #plot(states.trend)
 
@@ -460,7 +460,7 @@ lol.plot <- ggplot(top.states, aes(x=reorder(State,`Current Cases`),
 
  
 ggplotly(p = lol.plot,
-         width = 750, 
+         width = 500, 
          height = 500)             
 
 
@@ -604,7 +604,7 @@ max.plt <- max.plt %>%
                        ylab("Days")
 
 ggplotly(p=max.plt,
-         width = 750, 
+         width = 500, 
          height = 500)
 
 
@@ -729,7 +729,7 @@ cpc.plt.fnl <- cpc.plt %>%
                        ylab("Cases Per Capita")
 
 ggplotly(p=cpc.plt.fnl,
-         width = 750, 
+         width = 500, 
          height = 500)
 
 ```
