@@ -403,6 +403,95 @@ formattable(state.formattable)
 
 ```
 
+
+State Trends {data-orientation=rows data-icon="ion-android-options"}
+=======================================================================
+
+## Row 1 {data-height=800 .no-padding}
+
+### 7 Day Rolling Average of New Cases by State
+
+```{r, echo=FALSE, warning=FALSE}
+
+time <- as.POSIXct(strptime(c("2020-01-22",latest_date), format = "%y-%m-%d"))
+
+library(zoo) # this will hide base::as.Date
+library(geofacet)
+
+
+# calculate total new cases each day from rolling total
+state_roll <- state %>%
+              arrange(date) %>%
+              group_by(state) %>%
+              mutate(NewCases = cases-lag(cases))
+
+ 
+
+# Create rolling count of new cases
+state_roll <- state_roll %>%
+              arrange(desc(date)) %>%
+              group_by(state, date) %>%
+              summarise(NewCasesTotal = sum(NewCases, na.rm = TRUE)) %>%
+              mutate(`New Case 7-Day Avg` = zoo::rollmean(NewCasesTotal, k=7, fill = NA),
+                    CaseMonthAvg = zoo::rollmean(NewCasesTotal, k=30, fill = NA)) %>%
+              mutate_if(is.numeric, round, 1)
+
+ 
+#Find Max cases for scale Y axis limits
+max_cases <-  max(state_roll$`New Case 7-Day Avg`, na.rm = TRUE)
+
+state_roll_trend <- state_roll %>%
+                  #filter(`state` == "Wisconsin") %>%
+                  group_by(date, state) %>%
+                  ggplot(aes(x=as.POSIXct(date),
+                             y=`New Case 7-Day Avg`)) +
+                  coord_cartesian(ylim=c(0,max_cases)) +
+                  scale_y_continuous(expand = c(0, 0)) +
+                  geom_point(color=drkblue,
+                             size=.5) +
+                  geom_line(color=drkblue) +
+                  geom_area(fill=drkblue,
+                            alpha=.5) +
+                  geom_smooth(method=lm,
+                              color="Red",
+                              alpha=0.5,
+                              size=.5,
+                              se=FALSE,
+                              fullrange=FALSE) +
+                  scale_x_datetime(limits =time) +
+                  geofacet::facet_geo( ~ state,
+                       grid = "us_state_grid2",
+                       label = "code")  +
+                  theme(panel.background=element_rect(fill="white", color="white"),
+                        axis.text.x = element_blank(), #element_text(angle = 90),
+                        plot.background = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.ticks.x=element_blank(),
+                        axis.ticks.y=element_blank(),
+                        axis.text.y = element_blank(),
+                        panel.border = element_blank()) +
+                  labs(title="") +
+                  xlab("") +
+                  ylab("") +
+                  theme(legend.position = "none")
+
+
+state_roll_trend <- state_roll_trend + 
+                    theme(strip.background = element_blank())
+
+                 
+
+#plot(state_roll_trend)
+
+ggplotly(p= state_roll_trend,
+         width = 1000,
+         height = 1000)
+
+
+```
+
+
 State {data-orientation=columns data-icon="ion-android-map"}
 =======================================================================
 
@@ -414,7 +503,7 @@ Column {data-width=400}
 
 ```{r, echo=FALSE, warning=FALSE, fig.height=4, fig.width=4}
 
-time <- as.POSIXct(strptime(c("2020-01-22",latest_date), format = "%y-%m-%d"))
+
 top.states <- top_n(ungroup(state.tbl), 10, `Past Week Change CPC`)
 
 states.trend <- data %>% filter(`state` %in% top.states$State) %>%
@@ -503,94 +592,6 @@ ggplotly(p = p,
          height = 800)
 
 ```
-
-State Trends {data-orientation=rows data-icon="ion-android-options"}
-=======================================================================
-
-## Row 1 {data-height=800 .no-padding}
-
-### 7 Day Rolling Average of New Cases by State
-
-```{r, echo=FALSE, warning=FALSE}
-
- 
-
-library(zoo) # this will hide base::as.Date
-library(geofacet)
-
-
-# calculate total new cases each day from rolling total
-state_roll <- state %>%
-              arrange(date) %>%
-              group_by(state) %>%
-              mutate(NewCases = cases-lag(cases))
-
- 
-
-# Create rolling count of new cases
-state_roll <- state_roll %>%
-              arrange(desc(date)) %>%
-              group_by(state, date) %>%
-              summarise(NewCasesTotal = sum(NewCases, na.rm = TRUE)) %>%
-              mutate(`New Case 7-Day Avg` = zoo::rollmean(NewCasesTotal, k=7, fill = NA),
-                    CaseMonthAvg = zoo::rollmean(NewCasesTotal, k=30, fill = NA)) %>%
-              mutate_if(is.numeric, round, 1)
-
- 
-#Find Max cases for scale Y axis limits
-max_cases <-  max(state_roll$`New Case 7-Day Avg`, na.rm = TRUE)
-
-state_roll_trend <- state_roll %>%
-                  #filter(`state` == "Wisconsin") %>%
-                  group_by(date, state) %>%
-                  ggplot(aes(x=as.POSIXct(date),
-                             y=`New Case 7-Day Avg`)) +
-                  coord_cartesian(ylim=c(0,max_cases)) +
-                  scale_y_continuous(expand = c(0, 0)) +
-                  geom_point(color=drkblue,
-                             size=.5) +
-                  geom_line(color=drkblue) +
-                  geom_area(fill=drkblue,
-                            alpha=.5) +
-                  geom_smooth(method=lm,
-                              color="Red",
-                              alpha=0.5,
-                              size=.5,
-                              se=FALSE,
-                              fullrange=FALSE) +
-                  scale_x_datetime(limits =time) +
-                  geofacet::facet_geo( ~ state,
-                       grid = "us_state_grid2",
-                       label = "code")  +
-                  theme(panel.background=element_rect(fill="white", color="white"),
-                        axis.text.x = element_blank(), #element_text(angle = 90),
-                        plot.background = element_blank(),
-                        panel.grid.major = element_blank(),
-                        panel.grid.minor = element_blank(),
-                        axis.ticks.x=element_blank(),
-                        axis.ticks.y=element_blank(),
-                        axis.text.y = element_blank(),
-                        panel.border = element_blank()) +
-                  labs(title="") +
-                  xlab("") +
-                  ylab("") +
-                  theme(legend.position = "none")
-
-
-state_roll_trend <- state_roll_trend + 
-                    theme(strip.background = element_blank())
-
-                 
-
-#plot(state_roll_trend)
-
-ggplotly(p= state_roll_trend,
-         width = 1000,
-         height = 1000)
-
-
-```
-
 
 
 Counties {data-orientation=rows data-icon="ion-pin"}
